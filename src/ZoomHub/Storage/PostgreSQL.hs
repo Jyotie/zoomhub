@@ -15,8 +15,8 @@ module ZoomHub.Storage.PostgreSQL
   , getByURL
   , getByURL'
   -- , getExpiredActive
-  -- -- ** Write operations
-  -- , create
+  -- ** Write operations
+  , create
   -- , dequeueNextUnprocessed
   -- , markAsFailure
   -- , markAsSuccess
@@ -32,16 +32,20 @@ module ZoomHub.Storage.PostgreSQL
 
 import           Control.Arrow                           (returnA)
 import           Control.Concurrent.Async                (async)
-import           Control.Monad                           (when)
+import           Control.Exception                       (tryJust)
+import           Control.Monad                           (guard, when)
+import           Data.Aeson                              ((.=))
 import           Data.Int                                (Int64)
 import           Data.Pool                               (Pool, createPool)
 import           Data.Profunctor.Product.TH              (makeAdaptorAndInstance)
 import           Data.Text                               (Text)
 import           Data.Time.Clock                         (NominalDiffTime,
-                                                          UTCTime)
+                                                          UTCTime,
+                                                          getCurrentTime)
 import           Data.Time.Units                         (Second, TimeUnit,
                                                           toMicroseconds)
 import qualified Database.PostgreSQL.Simple              as PGS
+import qualified Database.PostgreSQL.Simple.Errors       as PGS
 import           Opaleye                                 (Column, Nullable,
                                                           PGBool, PGFloat8,
                                                           PGInt4, PGInt8,
@@ -56,7 +60,7 @@ import           Opaleye                                 (Column, Nullable,
                                                           runUpdate, (.===))
 import           System.Random                           (randomRIO)
 
--- import           ZoomHub.Log.Logger             (logWarning)
+import           ZoomHub.Log.Logger                      (logWarning)
 import           ZoomHub.Types.Content                   (Content (Content),
                                                           contentActiveAt,
                                                           contentCompletedAt,
@@ -70,7 +74,7 @@ import           ZoomHub.Types.Content                   (Content (Content),
                                                           contentSize,
                                                           contentState,
                                                           contentType,
-                                                          contentURL)
+                                                          contentURL, mkContent)
 import           ZoomHub.Types.ContentId                 (ContentId,
                                                           ContentIdColumn,
                                                           mkContentId,
@@ -79,8 +83,7 @@ import qualified ZoomHub.Types.ContentId                 as ContentId
 import           ZoomHub.Types.ContentMIME               (ContentMIME)
 import           ZoomHub.Types.ContentState              (ContentState,
                                                           ContentStateColumn)
-import           ZoomHub.Types.ContentType               (ContentType,
-                                                          ContentTypeColumn)
+import           ZoomHub.Types.ContentType               as ContentType
 import           ZoomHub.Types.ContentURI                (ContentURI, ContentURI' (ContentURI),
                                                           ContentURIColumn,
                                                           pContentURI)
@@ -91,8 +94,6 @@ import qualified ZoomHub.Types.DeepZoomImage.TileOverlap as TileOverlap
 import qualified ZoomHub.Types.DeepZoomImage.TileSize    as TileSize
 
 -- -- Public API
--- create :: (Integer -> String) -> ContentURI -> PGS.Connection -> IO Content
--- create encodeId uri conn = undefined
 
 -- getNextUnprocessed :: PGS.Connection -> IO (Maybe Content)
 -- getNextUnprocessed conn = undefined
@@ -330,6 +331,9 @@ runContentImageQuery :: PGS.Connection ->
                         IO [(ContentRow, NullableImageRow)]
 runContentImageQuery = runQuery
 
+runContentInsertQuery :: PGS.Connection -> Content -> IO Int64
+runContentInsertQuery conn content = runInsert conn contentTable (contentToRow content)
+
 -- Public API
 
 -- Read
@@ -530,7 +534,47 @@ contentSeqTable = Table "content_id_seq"
 contentSeqQuery :: Query ContentSeqRowReadWrite
 contentSeqQuery = queryTable contentSeqTable
 
+runContentSeqQuery :: PGS.Connection ->
+                      Query ContentSeqRowReadWrite ->
+                      IO [ContentSeqRow]
+runContentSeqQuery = runQuery
+
 lastContentRowInsertIdQuery :: Query (ContentSeqRowReadWrite)
 lastContentRowInsertIdQuery = proc () -> do
   cs <- contentSeqQuery -< ()
   returnA -< cs
+
+-- Write
+create :: (Integer -> String) -> ContentURI -> PGS.Connection -> IO Content
+create encodeId uri conn = PGS.withTransaction conn $ do
+    (r:_) <- runContentSeqQuery conn lastContentRowInsertIdQuery
+    let newId = toInteger $ csLastValue r + 1
+    insertWith newId
+  where
+    insertWith :: Integer -> IO Content
+    insertWith newId = do
+      initializedAt <- getCurrentTime
+      let cId = ContentId.fromInteger encodeId newId
+          -- TODO: Infer content type:
+          content = mkContent ContentType.Image cId uri initializedAt
+      result <- tryJust (guard . isConstraintError) $
+        runContentInsertQuery conn content
+      case result of
+        Left _ -> do
+          -- TODO: Implement proper logging:
+          logWarnExistingId newId cId
+          -- TODO: Prevent potentially infinite recursion:
+          insertWith (newId + 1)
+        Right _ -> return content
+
+    isConstraintError :: PGS.SqlError -> Bool
+    isConstraintError e = case PGS.constraintViolation e of
+      Just (PGS.CheckViolation _ _) -> True
+      _ -> False
+
+    logWarnExistingId :: Integer -> ContentId -> IO ()
+    logWarnExistingId dbId cId =
+      logWarning "Failed to insert ID because it already exists"
+        [ "dbId" .= dbId
+        , "id" .= cId
+        ]
