@@ -501,7 +501,7 @@ incrNumViewsQuery op cHashId numViewsSampleRate = op contentTable
     , crNumViews = Just $ (crNumViews cr) + fromIntegral numViewsSampleRate
     }
   )
-  -- TODO: Could we reuse `restrictByContentId` here?
+  -- TODO: Could we reuse `restrictContentId` here?
   (\cr -> (crHashId cr) .=== ContentId.toColumn cHashId)
 
 runIncrNumViewsQuery :: PGS.Connection -> ContentId -> Integer -> IO Int64
