@@ -378,13 +378,7 @@ getNextUnprocessed conn = do
       _   -> return Nothing
 
 nextUnprocessedQuery :: Query ContentRowRead
-nextUnprocessedQuery = first unprocessedQuery
-  where
-    first :: Query a -> Query a
-    first = limit 1
-
-unprocessedQuery :: Query ContentRowRead
-unprocessedQuery = proc () -> do
+nextUnprocessedQuery = first $ proc () -> do
     cs <- query -< ()
     stateRestriction Initialized -< cs
     returnA -< cs
@@ -392,6 +386,7 @@ unprocessedQuery = proc () -> do
     query :: Query ContentRowRead
     query = orderBy (mostPopularFirst <> oldestFirst) $ contentQuery
 
+    first = limit 1
     mostPopularFirst = desc crNumViews
     oldestFirst = asc crInitializedAt
 
