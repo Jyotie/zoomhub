@@ -1,7 +1,7 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 
-module ZoomHub.Storage.Internal.PostgreSQL where
+module ZoomHub.Storage.PostgreSQL.Internal where
 
 import           Data.Profunctor.Product.Default (Default)
 import           Opaleye                         (Query, Unpackspec,
