@@ -19,7 +19,7 @@ import           ZoomHub.Storage.PostgreSQL (ConnectInfo (..),
 import           ZoomHub.Types.Content      (contentNumViews, contentState,
                                              mkContent)
 import qualified ZoomHub.Types.ContentId    as ContentId
-import qualified ZoomHub.Types.ContentState    as ContentState
+import qualified ZoomHub.Types.ContentState as ContentState
 import           ZoomHub.Types.ContentType  (ContentType (Image))
 
 

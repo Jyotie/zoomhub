@@ -44,11 +44,11 @@ import           Data.Pool                               (Pool, createPool)
 import           Data.Profunctor.Product.TH              (makeAdaptorAndInstance)
 import           Data.Text                               (Text)
 import           Data.Time.Clock                         (NominalDiffTime,
-                                                          UTCTime,
-                                                          getCurrentTime,
-                                                          addUTCTime)
-import           Data.Time.Units                         (Second, TimeUnit,
-                                                          toMicroseconds, Minute)
+                                                          UTCTime, addUTCTime,
+                                                          getCurrentTime)
+import           Data.Time.Units                         (Minute, Second,
+                                                          TimeUnit,
+                                                          toMicroseconds)
 import qualified Database.PostgreSQL.Simple              as PGS
 import qualified Database.PostgreSQL.Simple.Errors       as PGS
 import           Opaleye                                 (Column, Nullable,
@@ -58,13 +58,15 @@ import           Opaleye                                 (Column, Nullable,
                                                           Query, QueryArr,
                                                           Table (Table),
                                                           arrangeUpdateSql, asc,
-                                                          constant, desc, pgBool, pgUTCTime, matchNullable,
+                                                          constant, desc,
                                                           leftJoin, limit,
+                                                          matchNullable,
                                                           optional, orderBy,
+                                                          pgBool, pgUTCTime,
                                                           queryTable, required,
                                                           restrict, runInsert,
                                                           runQuery, runUpdate,
-                                                          (.===), (.<=))
+                                                          (.<=), (.===))
 import           System.Random                           (randomRIO)
 
 import           ZoomHub.Log.Logger                      (logWarning)
