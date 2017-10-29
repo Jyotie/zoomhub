@@ -103,7 +103,7 @@ library
     , mime
     , network
     , network-uri
-    , opaleye
+    , opaleye == 0.4.2.0
     , postgresql-simple
     , process
     , product-profunctors
