@@ -14,9 +14,12 @@ import           Test.Hspec                 (Spec, around, describe, hspec, it,
 
 import           ZoomHub.Storage.PostgreSQL (ConnectInfo (..),
                                              defaultConnectInfo,
-                                             getNextUnprocessed)
-import           ZoomHub.Types.Content      (contentNumViews, mkContent)
+                                             getNextUnprocessed,
+                                             runInsertContent)
+import           ZoomHub.Types.Content      (contentNumViews, contentState,
+                                             mkContent)
 import qualified ZoomHub.Types.ContentId    as ContentId
+import qualified ZoomHub.Types.ContentState    as ContentState
 import           ZoomHub.Types.ContentType  (ContentType (Image))
 
 
@@ -39,13 +42,26 @@ withDatabaseConnection = bracket openConnection closeConnection
 spec :: Spec
 spec =
   around withDatabaseConnection $
-    describe "getNextUnprocessed" $
+    describe "getNextUnprocessed" $ do
       it "should return most viewed item that hasn’t been converted" $ \conn -> do
-        -- TODO: Create database state instead of relying on import:
-        let content = mkContent Image
+        let c1 = mkContent Image
                         (ContentId.fromString "6")
                         (fromJust . fromText $ "http://example.com/6/initialized.jpg")
                         (read "2017-01-01 00:00:00Z")
-            contentWithViews = content { contentNumViews = 100 }
+            c1WithViews = c1
+              { contentNumViews = 100
+              }
 
-        getNextUnprocessed conn `shouldReturn` (Just contentWithViews)
+            c2 = mkContent Image
+                        (ContentId.fromString "7")
+                        (fromJust . fromText $ "http://example.com/7/initialized.jpg")
+                        (read "2016-01-01 00:00:00Z")
+            c2WithViews = c2
+              { contentState = ContentState.CompletedSuccess
+              , contentNumViews = 200
+              }
+
+        _ <- runInsertContent conn c1WithViews
+        _ <- runInsertContent conn c2WithViews
+
+        getNextUnprocessed conn `shouldReturn` (Just c1WithViews)
