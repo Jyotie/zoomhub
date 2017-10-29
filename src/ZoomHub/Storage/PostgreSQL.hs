@@ -325,6 +325,10 @@ restrictContentState :: ContentState -> QueryArr ContentStateColumn ()
 restrictContentState state = proc stateColumn ->
     restrict -< stateColumn .=== ContentState.toColumn state
 
+-- Manipulation: Content
+runInsertContent :: PGS.Connection -> Content -> IO Int64
+runInsertContent conn content =  runInsert conn contentTable (contentToRow content)
+
 -- Query: Image
 imageQuery :: Query ImageRowReadWrite
 imageQuery = queryTable imageTable
@@ -334,8 +338,6 @@ runContentImageQuery :: PGS.Connection ->
                         IO [(ContentRow, NullableImageRow)]
 runContentImageQuery = runQuery
 
-runContentInsertQuery :: PGS.Connection -> Content -> IO Int64
-runContentInsertQuery conn content = runInsert conn contentTable (contentToRow content)
 
 -- Public API
 
@@ -616,7 +618,7 @@ create encodeId uri conn = PGS.withTransaction conn $ do
           -- TODO: Infer content type:
           content = mkContent ContentType.Image cId uri initializedAt
       result <- tryJust (guard . isConstraintError) $
-        runContentInsertQuery conn content
+        runInsertContent conn content
       case result of
         Left _ -> do
           -- TODO: Implement proper logging:
