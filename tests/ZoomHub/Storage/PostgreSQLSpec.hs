@@ -47,7 +47,7 @@ withDatabaseConnection = bracket openConnection closeConnection
 
 spec :: Spec
 spec =
-  around withDatabaseConnection $
+  around withDatabaseConnection $ do
     describe "getNextUnprocessed" $ do
       it "should return most viewed item that hasn’t been converted" $ \conn -> do
         let initializedContent = mkContent Image
@@ -71,3 +71,31 @@ spec =
         _ <- runInsertContent conn completedContentWithViews
 
         getNextUnprocessed conn `shouldReturn` (Just initializedContentWithViews)
+
+    describe "getExpiredActive" $ do
+      it "should return active content that has expired" $ \conn -> do
+        now <- getCurrentTime
+        let nonExpiredActiveContent' = mkContent Image
+              (ContentId.fromString "8")
+              (fromJust . fromText $ "http://example.com/8")
+              (read "2016-01-01 00:00:00Z" :: UTCTime)
+            nonExpiredActiveContent = nonExpiredActiveContent'
+              { contentState = ContentState.Active
+              , contentActiveAt =
+                  Just (subtractUTCTime now (toNominalDiffTime (20 :: Minute)))
+              }
+
+            expiredActiveContent' = mkContent Image
+              (ContentId.fromString "9")
+              (fromJust . fromText $ "http://example.com/9")
+              (read "2016-01-01 00:00:00Z" :: UTCTime)
+            expiredActiveContent = expiredActiveContent'
+              { contentState = ContentState.Active
+              , contentActiveAt =
+                  Just (subtractUTCTime now (toNominalDiffTime (35 :: Minute)))
+              }
+
+        _ <- runInsertContent conn nonExpiredActiveContent
+        _ <- runInsertContent conn expiredActiveContent
+
+        getExpiredActive conn `shouldReturn` [expiredActiveContent]
